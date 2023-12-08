@@ -18,12 +18,3 @@ const part2 = Object.keys(map).filter(k => k.endsWith('A')).map(v => until([v, 0
 
 console.log(part1);
 console.log(part2);
-
-
-// while (!(vs.every(v => v.endsWith('Z')))) {
-//     vs.forEach((v, j) => {
-//     const dir = seq[i];
-//     vs = vs.map(v => map[v][dir === 'L' ? 0 : 1]);
-//     c++;
-//     i = (i + 1) % seq.length;
-// }
