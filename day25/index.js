@@ -1,6 +1,14 @@
 const { readFileSync } = require('fs');
 const { EOL } = require('os');
 
+// generalized recursion helper
+function until(seed, step, predicate) {
+    while(!predicate(seed)) {
+        seed = step(seed);
+    }
+    return seed;
+}
+
 class PrioQueue {
     constructor(fn) {
         this.fn = fn;
@@ -14,17 +22,19 @@ class PrioQueue {
             Object.assign(this.heap, {[idx]: this.heap[Math.floor(idx / 2)], [Math.floor(idx / 2)]: this.heap[idx]});
             idx = Math.floor(idx / 2);
         }
+        return this;
     }
     increaseWeight(item) {
         let idx = this.heap.indexOf(item);
         if (idx === -1) {
-            return;
+            return this;;
         }
 
         while(idx > 1 && this.fn(this.heap[idx]) > this.fn(this.heap[Math.floor(idx / 2)])) {
             Object.assign(this.heap, {[idx]: this.heap[Math.floor(idx / 2)], [Math.floor(idx / 2)]: this.heap[idx]});
             idx = Math.floor(idx / 2);
         }
+        return this;
 
     }
     getMax() {
@@ -52,101 +62,6 @@ class PrioQueue {
 
 const lines = readFileSync('./input.txt').toString().trim().split(EOL);
 
-let weights = {};
+const part1 = [until([['', Infinity], lines.map(line => line.split(': ')).reduce((weights, [from, rest]) => rest.split(' ').reduce((weights, to) => Object.assign(weights, {[from]: Object.assign(weights[from] || {}, {[to]: 1}),  [to]: Object.assign(weights[to] || {}, {[from]: 1})}), weights), {})], ([[minCut, minCutWeight], weights]) => [[until([new Set([Object.keys(weights)[0]])].flatMap(A => [A, Object.keys(weights).slice(1).reduce((V, k) => V.add(k), new PrioQueue((v) => Object.entries(weights[v] || []).reduce((total, [k, v]) => total + (A.has(k) ? v : 0), 0)))]), ([A, V]) => [V.getMax()].flatMap(z => [A.add(z), Object.keys(weights[z]).reduce((V, w) => V.increaseWeight(w), V)]), ([_, V]) => V.size() <= 2)].flatMap(([A, V]) => [V.size() === 1 ? [...A][0] : V.getMax(), V.getMax()])].flatMap(([s, t]) => [Object.values(weights[t]).reduce((a,b) => a + b) < minCutWeight ? [t, Object.values(weights[t]).reduce((a,b) => a + b)] : [minCut, minCutWeight], Object.fromEntries(Object.entries([s, t].reduce((weights, x) => Object.entries(weights[x]).filter(([k]) => k !== `${s}.${t}`).reduce((weights, [k, w]) => Object.assign(weights, {[k]: Object.fromEntries([...Object.entries(weights[k]).filter(([e]) => e !== x), [`${s}.${t}`, (weights[`${s}.${t}`][k] || 0) + w]])}), weights), Object.assign(weights, {[`${s}.${t}`]: Object.fromEntries([...Object.keys(weights[s]), ...Object.keys(weights[t])].map(k => [k, (weights[s][k] || 0) + (weights[t][k] || 0)]).filter(([k]) => k !== s && k !== t && k !== `${s}.${t}`))}))).filter(([k]) => k !== s && k !== t))]), ([_, weights]) => Object.keys(weights).length === 1)].map(([currentMinimumCut, weights]) => currentMinimumCut[0].split('.').length * (Object.keys(weights)[0].split('.').length -  currentMinimumCut[0].split('.').length))[0]
 
-lines.forEach(line => {
-    const [from, rest] = line.split(': ');
-    const to = rest.split(' ');
-    weights[from] = weights[from] || {};
-    to.forEach(dest => {
-        weights[dest] = weights[dest] || {};
-        weights[dest][from] = 1;
-        weights[from][dest] = 1;
-    });
-});
-
-const vCount = Object.keys(weights).length;
-
-
-function weightToSet(v, A) {
-    if (!(v in weights)) {
-        return -Infinity;
-    }
-    let total = 0;
-    Object.entries(weights[v]).forEach(([k, w]) => {
-        if (A.has(k)) {
-            total +=w;
-        }
-    });
-    return total;
-}
-
-
-function minimumCutPhase(a) {
-    const A = new Set([a]);
-
-    const V = new PrioQueue((v) => weightToSet(v, A));
-    Object.keys(weights).forEach(k => {
-        if (k !== a) {
-            V.add(k);
-        }
-    })
-
-
-    while (V.size() > 2) {
-       const z = V.getMax();
-       A.add(z);
-       Object.keys(weights[z]).forEach(w => {
-        V.increaseWeight(w);
-       });
-    }
-
-    const s = V.getMax();
-    const t = V.getMax();
-    const tCutWeight = Object.values(weights[t]).reduce((a,b) => a + b);
-    const st = `${s}.${t}`;
-    weights[st] = {};
-    Object.entries(weights[s]).forEach(([k, w]) => {
-        weights[st][k] = w;
-        weights[k][st] = w;
-        delete weights[k][s];
-    });
-    delete weights[s];
-    Object.entries(weights[t]).forEach(([k, w]) => {
-        weights[st][k] = (weights[st][k] || 0) + w;
-        weights[k][st] = (weights[k][st] || 0) + w;
-        delete weights[k][t];
-    });
-    delete weights[t];
-    delete weights[st][st];
-    // console.log('cut of the phase', s, t, tCutWeight);
-    // console.log(weights);
-    // console.log();
-    return [t, tCutWeight];
-}
-
-let currentMinimumCut = ['', Infinity];
-
-function minimumCut() {
-    let V = Object.keys(weights);
-    while (V.length > 2) {
-        // console.log(V.length);
-        const a = V[0];
-        const cutOfThePhase = minimumCutPhase(a);
-        if (cutOfThePhase[1] < currentMinimumCut[1]) {
-            currentMinimumCut = cutOfThePhase;
-        }
-        V = Object.keys(weights);
-    }
-    const [s, t] = V;
-    const finalCutWeight = weights[s][t];
-    if (finalCutWeight < currentMinimumCut) {
-        currentMinimumCut = [t, finalCutWeight];
-    }
-}
-
-
-minimumCut();
-// console.log(currentMinimumCut);
-const size = currentMinimumCut[0].split('.').length;
-console.log(size * (vCount - size));
+console.log(part1);
