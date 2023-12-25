@@ -1,6 +1,55 @@
 const { readFileSync } = require('fs');
 const { EOL } = require('os');
 
+class PrioQueue {
+    constructor(fn) {
+        this.fn = fn;
+        this.heap = [null];
+    }
+    add(item) {
+        let idx = this.heap.length;
+        this.heap.push(item);
+
+        while(idx > 1 && this.fn(this.heap[idx]) > this.fn(this.heap[Math.floor(idx / 2)])) {
+            Object.assign(this.heap, {[idx]: this.heap[Math.floor(idx / 2)], [Math.floor(idx / 2)]: this.heap[idx]});
+            idx = Math.floor(idx / 2);
+        }
+    }
+    increaseWeight(item) {
+        let idx = this.heap.indexOf(item);
+        if (idx === -1) {
+            return;
+        }
+
+        while(idx > 1 && this.fn(this.heap[idx]) > this.fn(this.heap[Math.floor(idx / 2)])) {
+            Object.assign(this.heap, {[idx]: this.heap[Math.floor(idx / 2)], [Math.floor(idx / 2)]: this.heap[idx]});
+            idx = Math.floor(idx / 2);
+        }
+
+    }
+    getMax() {
+        Object.assign(this.heap, {[1]: this.heap[this.heap.length - 1], [this.heap.length - 1]: this.heap[1]});
+
+        const ret = this.heap.pop();
+        let idx = 1;
+
+        while (idx < this.heap.length && this.fn(this.heap[idx]) < Math.max(this.fn(this.heap[idx * 2]), this.fn(this.heap[idx * 2 + 1]))) {
+            let cidx = (this.fn(this.heap[idx * 2])) > (this.fn(this.heap[idx * 2 + 1])) ? idx * 2 : idx * 2 + 1;
+
+            Object.assign(this.heap, {[idx]: this.heap[cidx], [cidx]: this.heap[idx]});
+            idx = cidx;
+        }
+
+        return ret;
+    }
+    size() {
+        return this.heap.length - 1;
+    }
+
+}
+
+
+
 const lines = readFileSync('./input.txt').toString().trim().split(EOL);
 
 let weights = {};
@@ -20,6 +69,9 @@ const vCount = Object.keys(weights).length;
 
 
 function weightToSet(v, A) {
+    if (!(v in weights)) {
+        return -Infinity;
+    }
     let total = 0;
     Object.entries(weights[v]).forEach(([k, w]) => {
         if (A.has(k)) {
@@ -31,15 +83,26 @@ function weightToSet(v, A) {
 
 
 function minimumCutPhase(a) {
-    // console.log('start cut phase', a);
     const A = new Set([a]);
-    const V = Object.keys(weights).filter(k => k !== a);
-    while (V.length > 2) {
-       V.sort((v1, v2) => weightToSet(v2, A) - weightToSet(v1, A));
-       A.add(V.shift());
+
+    const V = new PrioQueue((v) => weightToSet(v, A));
+    Object.keys(weights).forEach(k => {
+        if (k !== a) {
+            V.add(k);
+        }
+    })
+
+
+    while (V.size() > 2) {
+       const z = V.getMax();
+       A.add(z);
+       Object.keys(weights[z]).forEach(w => {
+        V.increaseWeight(w);
+       });
     }
-    V.sort((v1, v2) => weightToSet(v2, A) - weightToSet(v1, A));
-    const [s, t] = V;
+
+    const s = V.getMax();
+    const t = V.getMax();
     const tCutWeight = Object.values(weights[t]).reduce((a,b) => a + b);
     const st = `${s}.${t}`;
     weights[st] = {};
@@ -67,6 +130,7 @@ let currentMinimumCut = ['', Infinity];
 function minimumCut() {
     let V = Object.keys(weights);
     while (V.length > 2) {
+        // console.log(V.length);
         const a = V[0];
         const cutOfThePhase = minimumCutPhase(a);
         if (cutOfThePhase[1] < currentMinimumCut[1]) {
